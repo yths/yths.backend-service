@@ -1,0 +1,13 @@
+[Unit]
+Description=nuunamnir backend service
+
+[Service]
+WorkingDirectory=%h/repositories/nuunamnir.backend-service
+ExecStart=python %h/repositories/nuunamnir.backend-service/monitor.py
+Type=simple
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=8s
+
+[Install]
+WantedBy=default.target

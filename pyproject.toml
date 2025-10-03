@@ -1,0 +1,7 @@
+[project]
+name = "nuunamnir backend service"
+version = "0.1.0"
+description = "A system monitor and statistics collector and visualizer."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
