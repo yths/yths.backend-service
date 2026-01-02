@@ -1,15 +1,38 @@
+from dataclasses import fields
 import json
+import logging
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import time
+from dataclasses import fields
 
 import gi.repository.Gio
 import redis
 import requests
 import schedule
+import obsws_python
 
+
+def job_stream(r, host="192.168.1.204", port=4455, password=None):
+    logging.getLogger("obsws_python").setLevel(logging.ERROR)
+    try:
+        if password is None:
+            client = obsws_python.ReqClient(host=host, port=port)
+        else:
+            client = obsws_python.ReqClient(host=host, port=port, password=password)
+        status = client.get_stream_status()
+        client.disconnect()
+        streaming = status.output_active
+    except (ConnectionRefusedError, TimeoutError):
+        streaming = False
+    r.xadd(
+        "stream",
+        {"measurement": json.dumps({"streaming": streaming})},
+    )
+    
 
 def job_location(r, token=None):
     if token is not None:
@@ -157,6 +180,37 @@ def job_powersupply(r):
     )
 
 
+def job_vpn(r):
+    connected = False
+    country = ""
+    city = ""
+
+    if shutil.which("nordvpn") is not None:
+        p = subprocess.Popen(
+            "nordvpn status",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        stdout, _ = p.communicate()
+
+        output = stdout.decode("utf-8").strip()
+        for line in output.split("\n"):
+            if line.startswith("Status:"):
+                status = line.split(":", 1)[1].strip()
+                if status == "Connected":
+                    connected = True
+            elif line.startswith("Country:"):
+                country = line.split(":", 1)[1].strip()
+            elif line.startswith("City:"):
+                city = line.split(":", 1)[1].strip()
+
+    r.xadd(
+        "vpn",
+        {"measurement": json.dumps({"connected": connected, "country": country, "city": city})},
+    )
+
+
 if __name__ == "__main__":
     try:
         r = redis.Redis(host=os.environ.get("NBS_REDIS_HOST", "localhost"), port=int(os.environ.get("NBS_REDIS_PORT", 6379)), db=int(os.environ.get("NBS_REDIS_DB", 1)))
@@ -189,6 +243,8 @@ if __name__ == "__main__":
         job_location, r=r, token=credentials.get("IPINFO_TOKEN")
     )
     schedule.every().second.do(job_audio, r=r)
+    schedule.every().second.do(job_stream, r=r)
+    schedule.every().second.do(job_vpn, r=r)
 
     schedule.run_all()
     while True:
