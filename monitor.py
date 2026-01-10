@@ -17,7 +17,9 @@ import obsws_python
 
 
 def job_stream(r, host="192.168.1.204", port=4455, password=None):
-    logging.getLogger("obsws_python").setLevel(logging.ERROR)
+    logging.getLogger("obsws_python").setLevel(logging.CRITICAL)
+    obs_running = True
+    streaming = True
     try:
         if password is None:
             client = obsws_python.ReqClient(host=host, port=port)
@@ -26,11 +28,12 @@ def job_stream(r, host="192.168.1.204", port=4455, password=None):
         status = client.get_stream_status()
         client.disconnect()
         streaming = status.output_active
-    except (ConnectionRefusedError, TimeoutError):
+    except ConnectionRefusedError:
         streaming = False
+        obs_running = False
     r.xadd(
         "stream",
-        {"measurement": json.dumps({"streaming": streaming})},
+        {"measurement": json.dumps({"streaming": streaming, "obs": obs_running})},
     )
     
 
