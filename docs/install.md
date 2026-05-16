@@ -9,13 +9,13 @@ This service polls system state and external APIs, then publishes the results to
 Install the required Python packages and the Redis (or Valkey) server:
 
 ```bash
-yay -S python-redis python-schedule python-requests python-rich python-gobject valkey
+yay -S python-redis python-schedule python-requests python-rich python-gobject python-obsws valkey
 ```
 
 For the optional pacman hook (see below), also install:
 
 ```bash
-yay -S pacman-contrib yay
+yay -S pacman-contrib
 ```
 
 An access token from [https://ipinfo.io](https://ipinfo.io) is required for the location job.
@@ -67,6 +67,7 @@ The optional `PostTransaction` hook refreshes the outstanding-updates count in R
 ```bash
 sudo install -m 755 pacman_post_transaction.py /usr/local/bin/pacman-redis-updates
 sudo install -m 644 update_count.py /usr/local/bin/update_count.py
+sudo install -m 644 subprocess_safe.py /usr/local/bin/subprocess_safe.py
 sudo install -m 644 redis-updates.hook /etc/pacman.d/hooks/
 ```
 
