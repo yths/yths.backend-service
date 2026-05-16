@@ -53,11 +53,14 @@ systemctl --user enable --now nuunamnir.backend
 
 ### Credentials
 
-Copy the credentials file template to `~/.config/credentials.json` and replace the placeholder with your access token for the IP service.
+Copy the credentials file template to `~/.config/credentials.json` and fill in the values:
 
 ```bash
 cp credentials.template.json ~/.config/credentials.json
 ```
+
+* `IPINFO_TOKEN` — required for the location job. Get one at [ipinfo.io](https://ipinfo.io).
+* `OBS_PASSWORD` — optional. Leave empty to connect to obs-websocket without authentication.
 
 ### Pacman Hook (Arch only)
 

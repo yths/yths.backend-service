@@ -13,6 +13,7 @@ import requests
 import schedule
 import obsws_python
 
+import subprocess_safe
 import update_count
 
 
@@ -37,6 +38,7 @@ def run_threaded(job_func, *args, **kwargs):
     cannot pile up overlapping threads or block faster jobs."""
     lock = _job_locks.setdefault(job_func, threading.Lock())
     if not lock.acquire(blocking=False):
+        logging.info("skipping %s: previous run still in flight", job_func.__name__)
         return
 
     def target():
@@ -119,14 +121,12 @@ def job_audio(r):
     muted = False
     volume = 0
     try:
-        result = subprocess.run(
-            ["pactl", "get-sink-mute", "@DEFAULT_SINK@"],
-            capture_output=True, text=True, errors="replace", timeout=5,
+        result = subprocess_safe.run(
+            ["pactl", "get-sink-mute", "@DEFAULT_SINK@"], timeout=5,
         )
         muted = result.stdout.strip().split(" ")[-1] == "yes"
-        result = subprocess.run(
-            ["pactl", "get-sink-volume", "@DEFAULT_SINK@"],
-            capture_output=True, text=True, errors="replace", timeout=5,
+        result = subprocess_safe.run(
+            ["pactl", "get-sink-volume", "@DEFAULT_SINK@"], timeout=5,
         )
         volume = int(result.stdout.strip().split("/")[1].strip().replace("%", ""))
     except (subprocess.SubprocessError, ValueError, IndexError):
@@ -219,9 +219,8 @@ def job_vpn(r):
     # link is actually up — most ticks skip the subprocess entirely.
     if connected and shutil.which("nordvpn") is not None:
         try:
-            result = subprocess.run(
-                ["nordvpn", "status"],
-                capture_output=True, text=True, errors="replace", timeout=5,
+            result = subprocess_safe.run(
+                ["nordvpn", "status"], timeout=5,
             )
             for line in result.stdout.strip().split("\n"):
                 if line.startswith("Country:"):
@@ -277,7 +276,10 @@ if __name__ == "__main__":
         run_threaded, job_location, r=r, token=credentials.get("IPINFO_TOKEN")
     )
     schedule.every().second.do(run_threaded, job_audio, r=r)
-    schedule.every().second.do(run_threaded, job_stream, r=r)
+    schedule.every().second.do(
+        run_threaded, job_stream,
+        r=r, password=(credentials.get("OBS_PASSWORD") or None),
+    )
     schedule.every(10).seconds.do(run_threaded, job_vpn, r=r)
 
     schedule.run_all()

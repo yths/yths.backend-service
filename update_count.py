@@ -2,6 +2,8 @@
 import platform
 import subprocess
 
+import subprocess_safe
+
 
 def count_outstanding_updates():
     """Return the number of pending package updates for this host.
@@ -18,13 +20,7 @@ def count_outstanding_updates():
 def _count_lines(argv):
     """Run argv and return the number of stdout lines; 0 on subprocess error."""
     try:
-        result = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=60,
-        )
+        result = subprocess_safe.run(argv, timeout=60)
         return len(result.stdout.splitlines())
     except subprocess.SubprocessError:
         return 0
@@ -39,12 +35,8 @@ def _arch():
 
 def _ubuntu():
     try:
-        result = subprocess.run(
-            ["/usr/lib/update-notifier/apt-check"],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=60,
+        result = subprocess_safe.run(
+            ["/usr/lib/update-notifier/apt-check"], timeout=60,
         )
         return int(result.stdout.split(";")[0])
     except (subprocess.SubprocessError, ValueError):
