@@ -15,13 +15,13 @@ def test_primary_user_returns_lowest_regular_uid():
     fake = [
         _entry("root", 0),
         _entry("bin", 1, "/usr/bin/nologin"),
-        _entry("yths", 1000),
+        _entry("user", 1000),
         _entry("other", 1001),
         _entry("nobody", 65534, "/usr/bin/nologin"),
     ]
     with patch("pacman_post_transaction.pwd.getpwall", return_value=fake):
         u = pacman_post_transaction._primary_user()
-    assert u.pw_name == "yths"
+    assert u.pw_name == "user"
 
 
 def test_primary_user_returns_none_when_no_regular_users():

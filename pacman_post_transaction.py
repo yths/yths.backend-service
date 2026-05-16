@@ -29,9 +29,9 @@ logging.basicConfig(
     format="%(levelname)s: %(message)s",
 )
 
-HOST = os.environ.get("NBS_REDIS_HOST", "localhost")
-PORT = int(os.environ.get("NBS_REDIS_PORT", 6379))
-DB = int(os.environ.get("NBS_REDIS_DB", 1))
+HOST = os.environ.get("BACKEND_REDIS_HOST", "localhost")
+PORT = int(os.environ.get("BACKEND_REDIS_PORT", 6379))
+DB = int(os.environ.get("BACKEND_REDIS_DB", 1))
 
 STREAM_MAXLEN = 86400
 

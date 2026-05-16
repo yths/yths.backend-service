@@ -2,9 +2,9 @@
 """Live TUI showing every key in the configured Redis DB.
 
 Connection env vars mirror configuration/qtile/config.py:
-    NBS_REDIS_HOST (default: localhost)
-    NBS_REDIS_PORT (default: 6379)
-    NBS_REDIS_DB   (default: 1)
+    BACKEND_REDIS_HOST (default: localhost)
+    BACKEND_REDIS_PORT (default: 6379)
+    BACKEND_REDIS_DB   (default: 1)
 """
 import argparse
 import json
@@ -30,9 +30,9 @@ KEYBINDINGS = [
 ]
 
 
-HOST = os.environ.get("NBS_REDIS_HOST", "localhost")
-PORT = int(os.environ.get("NBS_REDIS_PORT", 6379))
-DB = int(os.environ.get("NBS_REDIS_DB", 1))
+HOST = os.environ.get("BACKEND_REDIS_HOST", "localhost")
+PORT = int(os.environ.get("BACKEND_REDIS_PORT", 6379))
+DB = int(os.environ.get("BACKEND_REDIS_DB", 1))
 
 
 def connect():

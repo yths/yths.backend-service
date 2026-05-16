@@ -23,8 +23,8 @@ logging.basicConfig(
 )
 logging.getLogger("obsws_python").setLevel(logging.CRITICAL)
 
-OBS_HOST = os.environ.get("NBS_OBS_HOST", "localhost")
-OBS_PORT = int(os.environ.get("NBS_OBS_PORT", 4455))
+OBS_HOST = os.environ.get("BACKEND_OBS_HOST", "localhost")
+OBS_PORT = int(os.environ.get("BACKEND_OBS_PORT", 4455))
 
 # Cap each stream at roughly 24h of 1Hz data so redis memory stays bounded.
 STREAM_MAXLEN = 86400
@@ -240,9 +240,9 @@ def job_vpn(r):
 if __name__ == "__main__":
     try:
         r = redis.Redis(
-            host=os.environ.get("NBS_REDIS_HOST", "localhost"),
-            port=int(os.environ.get("NBS_REDIS_PORT", 6379)),
-            db=int(os.environ.get("NBS_REDIS_DB", 1)),
+            host=os.environ.get("BACKEND_REDIS_HOST", "localhost"),
+            port=int(os.environ.get("BACKEND_REDIS_PORT", 6379)),
+            db=int(os.environ.get("BACKEND_REDIS_DB", 1)),
             socket_timeout=5,
             socket_connect_timeout=2,
             retry_on_timeout=True,

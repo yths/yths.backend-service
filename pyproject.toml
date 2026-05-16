@@ -1,5 +1,5 @@
 [project]
-name = "nuunamnir-backend-service"
+name = "backend-service"
 version = "0.1.0"
 description = "A system monitor and statistics collector and visualizer."
 readme = "README.md"

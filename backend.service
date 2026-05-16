@@ -1,0 +1,16 @@
+[Unit]
+Description=System metrics backend service
+
+[Service]
+WorkingDirectory=%h/repositories/yths.backend-service
+EnvironmentFile=-%h/.config/backend.env
+ExecStart=python3 %h/repositories/yths.backend-service/monitor.py
+Type=simple
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=8s
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Install]
+WantedBy=default.target
