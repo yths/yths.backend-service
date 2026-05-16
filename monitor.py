@@ -206,22 +206,25 @@ def job_powersupply(r):
 
 
 def job_vpn(r):
-    connected = False
+    # /sys/class/net/<iface> is the kernel's view of the link, so it can't
+    # drift with CLI format changes or transient daemon errors. nordlynx is
+    # the default NordLynx (WireGuard) tunnel; nordtun is the OpenVPN one.
+    connected = any(
+        os.path.exists(f"/sys/class/net/{n}") for n in ("nordlynx", "nordtun")
+    )
     country = ""
     city = ""
 
-    if shutil.which("nordvpn") is not None:
+    # Country/city aren't exposed via /sys, so call the CLI only when the
+    # link is actually up — most ticks skip the subprocess entirely.
+    if connected and shutil.which("nordvpn") is not None:
         try:
             result = subprocess.run(
                 ["nordvpn", "status"],
                 capture_output=True, text=True, timeout=5,
             )
             for line in result.stdout.strip().split("\n"):
-                if line.startswith("Status:"):
-                    status = line.split(":", 1)[1].strip()
-                    if status == "Connected":
-                        connected = True
-                elif line.startswith("Country:"):
+                if line.startswith("Country:"):
                     country = line.split(":", 1)[1].strip()
                 elif line.startswith("City:"):
                     city = line.split(":", 1)[1].strip()
