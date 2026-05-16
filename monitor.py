@@ -55,10 +55,10 @@ def job_stream(r, host=OBS_HOST, port=OBS_PORT, password=None):
     streaming = False
     try:
         if password is None:
-            client = obsws_python.ReqClient(host=host, port=port, timeout=1)
+            client = obsws_python.ReqClient(host=host, port=port, timeout=3)
         else:
             client = obsws_python.ReqClient(
-                host=host, port=port, password=password, timeout=1,
+                host=host, port=port, password=password, timeout=3,
             )
         status = client.get_stream_status()
         client.disconnect()
@@ -121,12 +121,12 @@ def job_audio(r):
     try:
         result = subprocess.run(
             ["pactl", "get-sink-mute", "@DEFAULT_SINK@"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, errors="replace", timeout=5,
         )
         muted = result.stdout.strip().split(" ")[-1] == "yes"
         result = subprocess.run(
             ["pactl", "get-sink-volume", "@DEFAULT_SINK@"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, errors="replace", timeout=5,
         )
         volume = int(result.stdout.strip().split("/")[1].strip().replace("%", ""))
     except (subprocess.SubprocessError, ValueError, IndexError):
@@ -221,7 +221,7 @@ def job_vpn(r):
         try:
             result = subprocess.run(
                 ["nordvpn", "status"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, errors="replace", timeout=5,
             )
             for line in result.stdout.strip().split("\n"):
                 if line.startswith("Country:"):

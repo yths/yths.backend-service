@@ -15,20 +15,25 @@ def count_outstanding_updates():
     return _arch()
 
 
-def _line_count_via_wc(cmd):
+def _count_lines(argv):
+    """Run argv and return the number of stdout lines; 0 on subprocess error."""
     try:
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=60,
+            argv,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=60,
         )
-        return int(result.stdout.strip())
-    except (subprocess.SubprocessError, ValueError):
+        return len(result.stdout.splitlines())
+    except subprocess.SubprocessError:
         return 0
 
 
 def _arch():
     return (
-        _line_count_via_wc("yay -Qua --color never | wc -l")
-        + _line_count_via_wc("checkupdates | wc -l")
+        _count_lines(["yay", "-Qua", "--color", "never"])
+        + _count_lines(["checkupdates"])
     )
 
 
@@ -36,7 +41,10 @@ def _ubuntu():
     try:
         result = subprocess.run(
             ["/usr/lib/update-notifier/apt-check"],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=60,
         )
         return int(result.stdout.split(";")[0])
     except (subprocess.SubprocessError, ValueError):
