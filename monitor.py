@@ -5,6 +5,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 import gi.repository.Gio
@@ -19,66 +20,99 @@ logging.getLogger("obsws_python").setLevel(logging.CRITICAL)
 OBS_HOST = os.environ.get("NBS_OBS_HOST", "localhost")
 OBS_PORT = int(os.environ.get("NBS_OBS_PORT", 4455))
 
+# Cap each stream at roughly 24h of 1Hz data so redis memory stays bounded.
+STREAM_MAXLEN = 86400
+
+_job_locks = {}
+
+
+def run_threaded(job_func, *args, **kwargs):
+    """Dispatch `job_func` in a daemon thread. If a previous invocation of
+    the same function is still running, drop this tick — that way a slow job
+    cannot pile up overlapping threads or block faster jobs."""
+    lock = _job_locks.setdefault(job_func, threading.Lock())
+    if not lock.acquire(blocking=False):
+        return
+
+    def target():
+        try:
+            job_func(*args, **kwargs)
+        except Exception:
+            logging.exception("%s raised", job_func.__name__)
+        finally:
+            lock.release()
+
+    threading.Thread(target=target, daemon=True).start()
+
 
 def job_stream(r, host=OBS_HOST, port=OBS_PORT, password=None):
-    obs_running = True
-    streaming = True
+    obs_running = False
+    streaming = False
     try:
         if password is None:
             client = obsws_python.ReqClient(host=host, port=port, timeout=1)
         else:
-            client = obsws_python.ReqClient(host=host, port=port, password=password, timeout=1)
+            client = obsws_python.ReqClient(
+                host=host, port=port, password=password, timeout=1,
+            )
         status = client.get_stream_status()
         client.disconnect()
+        obs_running = True
         streaming = status.output_active
     except (ConnectionRefusedError, OSError, TimeoutError):
-        streaming = False
-        obs_running = False
+        pass
     r.xadd(
         "stream",
         {"measurement": json.dumps({"streaming": streaming, "obs": obs_running})},
+        maxlen=STREAM_MAXLEN, approximate=True,
     )
-    
+
 
 def job_location(r, token=None):
-    if token is not None:
-        try:
-            response = requests.get(f"https://ipinfo.io?token={token}", timeout=5)
-            data = response.json()
-            longitude = float(data["loc"].split(",")[1])
-            latitude = float(data["loc"].split(",")[0])
+    # Composite payload — a partial result would mislead consumers, so this
+    # job is the one exception to the "always xadd" rule: skip on error.
+    if token is None:
+        return
+    try:
+        response = requests.get(f"https://ipinfo.io?token={token}", timeout=5)
+        data = response.json()
+        longitude = float(data["loc"].split(",")[1])
+        latitude = float(data["loc"].split(",")[0])
 
-            ip_address = data["ip"]
-            timezone = data["timezone"]
+        ip_address = data["ip"]
+        timezone = data["timezone"]
 
-            response = requests.get(
-                f"https://api.sunrisesunset.io/json?lat={latitude}&lng={longitude}&timezone={data['timezone']}&time_format=24",
-                timeout=5,
-            )
-            data = response.json()
-            sunrise = data["results"]["sunrise"]
-            sunset = data["results"]["sunset"]
+        response = requests.get(
+            f"https://api.sunrisesunset.io/json?lat={latitude}&lng={longitude}&timezone={timezone}&time_format=24",
+            timeout=5,
+        )
+        data = response.json()
+        sunrise = data["results"]["sunrise"]
+        sunset = data["results"]["sunset"]
 
-            r.xadd(
-                "location",
-                {
-                    "measurement": json.dumps(
-                        {
-                            "latitude": latitude,
-                            "longitude": longitude,
-                            "ip_address": ip_address,
-                            "timezone": timezone,
-                            "sunrise": sunrise,
-                            "sunset": sunset,
-                        }
-                    )
-                },
-            )
-        except (requests.exceptions.RequestException, ValueError, KeyError):
-            logging.exception("job_location failed")
+        r.xadd(
+            "location",
+            {
+                "measurement": json.dumps(
+                    {
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "ip_address": ip_address,
+                        "timezone": timezone,
+                        "sunrise": sunrise,
+                        "sunset": sunset,
+                    }
+                )
+            },
+            maxlen=STREAM_MAXLEN, approximate=True,
+        )
+    except (requests.exceptions.RequestException, ValueError, KeyError):
+        logging.exception("job_location failed")
 
 
 def job_audio(r):
+    muted = False
+    volume = 0
     try:
         result = subprocess.run(
             ["pactl", "get-sink-mute", "@DEFAULT_SINK@"],
@@ -90,12 +124,17 @@ def job_audio(r):
             capture_output=True, text=True, timeout=5,
         )
         volume = int(result.stdout.strip().split("/")[1].strip().replace("%", ""))
-        r.xadd("audio", {"measurement": json.dumps({"muted": muted, "volume": volume})})
     except (subprocess.SubprocessError, ValueError, IndexError):
         logging.exception("job_audio failed")
-    
+    r.xadd(
+        "audio",
+        {"measurement": json.dumps({"muted": muted, "volume": volume})},
+        maxlen=STREAM_MAXLEN, approximate=True,
+    )
+
 
 def job_updates(r):
+    outstanding_updates = 0
     try:
         if platform.freedesktop_os_release()["NAME"] != "Ubuntu":
             result = subprocess.run(
@@ -124,13 +163,13 @@ def job_updates(r):
                 outstanding_updates = int(result.stdout.split(";")[0])
             except ValueError:
                 outstanding_updates = 0
-
-        r.xadd(
-            "updates",
-            {"measurement": json.dumps({"outstanding_updates": outstanding_updates})},
-        )
     except (subprocess.SubprocessError, OSError):
         logging.exception("job_updates failed")
+    r.xadd(
+        "updates",
+        {"measurement": json.dumps({"outstanding_updates": outstanding_updates})},
+        maxlen=STREAM_MAXLEN, approximate=True,
+    )
 
 
 def job_bluetooth(r, manager):
@@ -157,6 +196,7 @@ def job_bluetooth(r, manager):
                 }
             )
         },
+        maxlen=STREAM_MAXLEN, approximate=True,
     )
 
 
@@ -177,12 +217,13 @@ def job_powersupply(r):
                     if status == "Discharging":
                         grid = False
                 batteries[filename] = {"capacity": capacity, "status": status}
-        r.xadd(
-            "power_supply",
-            {"measurement": json.dumps({"grid": grid, "batteries": batteries})},
-        )
     except OSError:
         logging.exception("job_powersupply failed")
+    r.xadd(
+        "power_supply",
+        {"measurement": json.dumps({"grid": grid, "batteries": batteries})},
+        maxlen=STREAM_MAXLEN, approximate=True,
+    )
 
 
 def job_vpn(r):
@@ -211,12 +252,20 @@ def job_vpn(r):
     r.xadd(
         "vpn",
         {"measurement": json.dumps({"connected": connected, "country": country, "city": city})},
+        maxlen=STREAM_MAXLEN, approximate=True,
     )
 
 
 if __name__ == "__main__":
     try:
-        r = redis.Redis(host=os.environ.get("NBS_REDIS_HOST", "localhost"), port=int(os.environ.get("NBS_REDIS_PORT", 6379)), db=int(os.environ.get("NBS_REDIS_DB", 1)))
+        r = redis.Redis(
+            host=os.environ.get("NBS_REDIS_HOST", "localhost"),
+            port=int(os.environ.get("NBS_REDIS_PORT", 6379)),
+            db=int(os.environ.get("NBS_REDIS_DB", 1)),
+            socket_timeout=5,
+            socket_connect_timeout=2,
+            retry_on_timeout=True,
+        )
         r.ping()
     except redis.exceptions.ConnectionError:
         sys.exit(1)
@@ -239,17 +288,20 @@ if __name__ == "__main__":
     else:
         credentials = dict()
 
-    schedule.every().second.do(job_bluetooth, r=r, manager=manager)
-    schedule.every().second.do(job_powersupply, r=r)
-    schedule.every().hour.do(job_updates, r=r)
+    schedule.every().second.do(run_threaded, job_bluetooth, r=r, manager=manager)
+    schedule.every().second.do(run_threaded, job_powersupply, r=r)
+    schedule.every().hour.do(run_threaded, job_updates, r=r)
     schedule.every().hour.at(":30").do(
-        job_location, r=r, token=credentials.get("IPINFO_TOKEN")
+        run_threaded, job_location, r=r, token=credentials.get("IPINFO_TOKEN")
     )
-    schedule.every().second.do(job_audio, r=r)
-    schedule.every().second.do(job_stream, r=r)
-    schedule.every(10).seconds.do(job_vpn, r=r)
+    schedule.every().second.do(run_threaded, job_audio, r=r)
+    schedule.every().second.do(run_threaded, job_stream, r=r)
+    schedule.every(10).seconds.do(run_threaded, job_vpn, r=r)
 
     schedule.run_all()
     while True:
-        schedule.run_pending()
+        try:
+            schedule.run_pending()
+        except Exception:
+            logging.exception("scheduler tick failed")
         time.sleep(1)

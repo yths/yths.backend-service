@@ -1,1 +1,6 @@
-schedule==1.2.2
+redis
+requests
+schedule
+obsws-python
+rich
+PyGObject

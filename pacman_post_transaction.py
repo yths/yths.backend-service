@@ -24,6 +24,8 @@ HOST = os.environ.get("NBS_REDIS_HOST", "localhost")
 PORT = int(os.environ.get("NBS_REDIS_PORT", 6379))
 DB = int(os.environ.get("NBS_REDIS_DB", 1))
 
+STREAM_MAXLEN = 86400
+
 
 def _primary_user():
     """Lowest-UID regular user with a real login shell, or None."""
@@ -56,10 +58,14 @@ def main():
     outstanding += _count("yay -Qua --color never | wc -l")
 
     try:
-        r = redis.Redis(host=HOST, port=PORT, db=DB, socket_connect_timeout=2)
+        r = redis.Redis(
+            host=HOST, port=PORT, db=DB,
+            socket_timeout=5, socket_connect_timeout=2,
+        )
         r.xadd(
             "updates",
             {"measurement": json.dumps({"outstanding_updates": outstanding})},
+            maxlen=STREAM_MAXLEN, approximate=True,
         )
     except redis.exceptions.RedisError as e:
         print(f"redis write failed: {e}", file=sys.stderr)
