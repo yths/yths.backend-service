@@ -106,3 +106,12 @@ Each stream stores entries with a single `measurement` field containing a JSON o
 | `location`     | hourly at xx:30         | `latitude: float`, `longitude: float`, `ip_address: str`, `timezone: str`, `sunrise: str`, `sunset: str`           |
 
 All streams are capped at ~86 400 entries (≈ 24 h of 1 Hz data) via `XADD ... MAXLEN ~`.
+
+## Tests
+
+Pure-function tests live under `tests/`. Install the dev dependency and run:
+
+```bash
+yay -S python-pytest
+pytest
+```

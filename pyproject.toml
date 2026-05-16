@@ -12,3 +12,10 @@ dependencies = [
     "rich",
     "PyGObject",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
