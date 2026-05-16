@@ -3,11 +3,14 @@ Description=nuunamnir backend service
 
 [Service]
 WorkingDirectory=%h/repositories/nuunamnir.backend-service
+EnvironmentFile=-%h/.config/nuunamnir.backend.env
 ExecStart=python %h/repositories/nuunamnir.backend-service/monitor.py
 Type=simple
 KillSignal=SIGINT
 Restart=on-failure
 RestartSec=8s
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Install]
 WantedBy=default.target

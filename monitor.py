@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import platform
 import shutil
 import subprocess
 import sys
@@ -14,7 +13,13 @@ import requests
 import schedule
 import obsws_python
 
+import update_count
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 logging.getLogger("obsws_python").setLevel(logging.CRITICAL)
 
 OBS_HOST = os.environ.get("NBS_OBS_HOST", "localhost")
@@ -136,34 +141,8 @@ def job_audio(r):
 def job_updates(r):
     outstanding_updates = 0
     try:
-        if platform.freedesktop_os_release()["NAME"] != "Ubuntu":
-            result = subprocess.run(
-                "yay -Qua --color never | wc -l",
-                shell=True, capture_output=True, text=True, timeout=60,
-            )
-            try:
-                outstanding_updates = int(result.stdout.strip())
-            except ValueError:
-                outstanding_updates = 0
-
-            result = subprocess.run(
-                "checkupdates | wc -l",
-                shell=True, capture_output=True, text=True, timeout=60,
-            )
-            try:
-                outstanding_updates += int(result.stdout.strip())
-            except ValueError:
-                outstanding_updates += 0
-        else:
-            result = subprocess.run(
-                ["/usr/lib/update-notifier/apt-check"],
-                capture_output=True, text=True, timeout=60,
-            )
-            try:
-                outstanding_updates = int(result.stdout.split(";")[0])
-            except ValueError:
-                outstanding_updates = 0
-    except (subprocess.SubprocessError, OSError):
+        outstanding_updates = update_count.count_outstanding_updates()
+    except OSError:
         logging.exception("job_updates failed")
     r.xadd(
         "updates",
@@ -299,9 +278,12 @@ if __name__ == "__main__":
     schedule.every(10).seconds.do(run_threaded, job_vpn, r=r)
 
     schedule.run_all()
-    while True:
-        try:
-            schedule.run_pending()
-        except Exception:
-            logging.exception("scheduler tick failed")
-        time.sleep(1)
+    try:
+        while True:
+            try:
+                schedule.run_pending()
+            except Exception:
+                logging.exception("scheduler tick failed")
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logging.info("shutting down")

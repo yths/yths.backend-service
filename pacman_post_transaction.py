@@ -5,20 +5,29 @@ Invoked by the pacman PostTransaction hook so the dashboard reflects the
 new state immediately instead of waiting up to an hour for the next tick
 of job_updates in monitor.py.
 
-When invoked as root (the pacman-hook case), drops to the lowest-UID
-regular user (UID 1000..59999, real shell) before running checkupdates
-and yay -Qua, since both refuse to run as root. Redis is contacted on
-localhost regardless of the running user.
+When invoked as root (the pacman-hook case), re-execs itself via runuser
+as the lowest-UID regular user (UID 1000..59999, with a real login shell)
+before counting updates, since checkupdates and yay refuse to run as root.
 """
 import json
+import logging
 import os
 import pwd
-import subprocess
 import sys
 
 import redis
 import redis.exceptions
 
+# Allow the import below to find update_count whether the script is run
+# from the repo or installed alongside it to /usr/local/bin/.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import update_count
+
+
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(levelname)s: %(message)s",
+)
 
 HOST = os.environ.get("NBS_REDIS_HOST", "localhost")
 PORT = int(os.environ.get("NBS_REDIS_PORT", 6379))
@@ -37,25 +46,23 @@ def _primary_user():
     return min(candidates, key=lambda e: e.pw_uid) if candidates else None
 
 
-def _count(cmd):
-    user = _primary_user() if os.geteuid() == 0 else None
-    full = (
-        ["runuser", "-u", user.pw_name, "--", "sh", "-c", cmd]
-        if user is not None
-        else ["sh", "-c", cmd]
-    )
-    try:
-        result = subprocess.run(
-            full, capture_output=True, text=True, timeout=60,
-        )
-        return int(result.stdout.strip() or 0)
-    except (subprocess.SubprocessError, ValueError):
-        return 0
-
-
 def main():
-    outstanding = _count("checkupdates | wc -l")
-    outstanding += _count("yay -Qua --color never | wc -l")
+    if os.geteuid() == 0:
+        user = _primary_user()
+        if user is None:
+            logging.error("no regular user available; cannot drop privileges")
+            return
+        os.execvp(
+            "runuser",
+            ["runuser", "-u", user.pw_name, "--",
+             sys.executable, os.path.abspath(__file__)],
+        )
+
+    try:
+        outstanding = update_count.count_outstanding_updates()
+    except OSError:
+        logging.exception("update count failed")
+        outstanding = 0
 
     try:
         r = redis.Redis(
@@ -67,8 +74,8 @@ def main():
             {"measurement": json.dumps({"outstanding_updates": outstanding})},
             maxlen=STREAM_MAXLEN, approximate=True,
         )
-    except redis.exceptions.RedisError as e:
-        print(f"redis write failed: {e}", file=sys.stderr)
+    except redis.exceptions.RedisError:
+        logging.exception("redis write failed")
 
 
 if __name__ == "__main__":
