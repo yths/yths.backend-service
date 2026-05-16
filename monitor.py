@@ -251,23 +251,21 @@ if __name__ == "__main__":
     except redis.exceptions.ConnectionError:
         sys.exit(1)
 
-    manager = gi.repository.Gio.DBusProxy().new_for_bus_sync(
-        **{
-            "bus_type": gi.repository.Gio.BusType.SYSTEM,
-            "name": "org.bluez",
-            "object_path": "/",
-            "interface_name": "org.freedesktop.DBus.ObjectManager",
-            "flags": gi.repository.Gio.DBusProxyFlags.NONE,
-            "info": None,
-            "cancellable": None,
-        }
+    manager = gi.repository.Gio.DBusProxy.new_for_bus_sync(
+        bus_type=gi.repository.Gio.BusType.SYSTEM,
+        name="org.bluez",
+        object_path="/",
+        interface_name="org.freedesktop.DBus.ObjectManager",
+        flags=gi.repository.Gio.DBusProxyFlags.NONE,
+        info=None,
+        cancellable=None,
     )
 
-    if os.path.exists(os.path.expanduser("~/.config/credentials.json")):
+    try:
         with open(os.path.expanduser("~/.config/credentials.json")) as input_handle:
             credentials = json.load(input_handle)
-    else:
-        credentials = dict()
+    except FileNotFoundError:
+        credentials = {}
 
     schedule.every().second.do(run_threaded, job_bluetooth, r=r, manager=manager)
     schedule.every().second.do(run_threaded, job_powersupply, r=r)

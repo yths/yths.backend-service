@@ -83,7 +83,7 @@ The installed copies in `/usr/local/bin/` are snapshots — re-run the `install`
 A live TUI listing every key in the configured redis DB, refreshing once per second. Streams show length, age of the newest entry, and a preview of the latest payload — useful for verifying that the service is publishing what you expect.
 
 ```bash
-python redis_debug.py
+python3 redis_debug.py
 ```
 
 Keybindings:

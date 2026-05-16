@@ -126,7 +126,7 @@ def peek(r, key, ktype):
 
     if ktype == "hash":
         length = r.hlen(key)
-        cursor, fields = r.hscan(key, count=3)
+        _, fields = r.hscan(key, count=3)
         items = list(fields.items())[:3]
         preview = ", ".join(f"{_decode(k)}={_truncate(_decode(v), 30)}" for k, v in items)
         if length > len(items):
