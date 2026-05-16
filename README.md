@@ -46,4 +46,17 @@ Copy the credentials file template to `~/.config/credentials.json` and replace t
 
 ```bash
 cp credentials.template.json ~/.config/credentials.json
-````
+```
+
+### Pacman Hook (Arch only)
+
+Optionally install a pacman `PostTransaction` hook that refreshes the outstanding-updates count in redis immediately after every transaction, instead of waiting up to an hour for the next tick of `job_updates`:
+
+```bash
+sudo install -m 755 pacman_post_transaction.py /usr/local/bin/pacman-redis-updates
+sudo install -m 644 redis-updates.hook /etc/pacman.d/hooks/
+```
+
+The hook runs as root; the script then drops to the lowest-UID regular user (UID 1000–59999 with a real login shell) to run `checkupdates` and `yay -Qua`, since both refuse to run as root. Redis is contacted on `localhost` and honours the same `NBS_REDIS_HOST` / `NBS_REDIS_PORT` / `NBS_REDIS_DB` environment variables as the main service.
+
+The installed copy in `/usr/local/bin/` is a snapshot — re-run the `install` command after editing `pacman_post_transaction.py` in the repo.

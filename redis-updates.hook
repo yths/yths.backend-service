@@ -1,0 +1,11 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Refresh redis outstanding-updates count
+When = PostTransaction
+Exec = /usr/local/bin/pacman-redis-updates
