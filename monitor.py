@@ -117,6 +117,41 @@ def job_location(r, token=None):
         logging.exception("job_location failed")
 
 
+def _detect_active_sink():
+    """Return the description of the sink currently producing audio.
+
+    Prefers the default sink if it is RUNNING; otherwise any RUNNING sink;
+    otherwise the default sink (so the widget has somewhere sensible to land
+    when audio resumes). Returns None if pactl is unavailable or the output
+    cannot be parsed.
+    """
+    try:
+        sinks_raw = subprocess_safe.run(
+            ["pactl", "--format=json", "list", "sinks"], timeout=5,
+        )
+        sinks = json.loads(sinks_raw.stdout)
+        default = subprocess_safe.run(
+            ["pactl", "get-default-sink"], timeout=5,
+        ).stdout.strip()
+    except (subprocess.SubprocessError, ValueError):
+        return None
+
+    by_name = {s.get("name"): s for s in sinks if isinstance(s, dict)}
+    running = [s for s in sinks if isinstance(s, dict) and s.get("state") == "RUNNING"]
+
+    chosen = None
+    if default in by_name and by_name[default].get("state") == "RUNNING":
+        chosen = by_name[default]
+    elif running:
+        chosen = running[0]
+    elif default in by_name:
+        chosen = by_name[default]
+
+    if chosen is None:
+        return None
+    return chosen.get("description")
+
+
 def job_audio(r):
     muted = False
     volume = 0
@@ -131,9 +166,13 @@ def job_audio(r):
         volume = int(result.stdout.strip().split("/")[1].strip().replace("%", ""))
     except (subprocess.SubprocessError, ValueError, IndexError):
         logging.exception("job_audio failed")
+    measurement = {"muted": muted, "volume": volume}
+    active_sink = _detect_active_sink()
+    if active_sink:
+        measurement["active_sink"] = active_sink
     r.xadd(
         "audio",
-        {"measurement": json.dumps({"muted": muted, "volume": volume})},
+        {"measurement": json.dumps(measurement)},
         maxlen=STREAM_MAXLEN, approximate=True,
     )
 

@@ -8,7 +8,7 @@ Each stream stores entries with a single `measurement` field containing a JSON o
 | -------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `bluetooth`    | 1 s                     | map of `<MAC>` → `{ "capacity": <int>\|"Unknown" }`                                                                |
 | `power_supply` | 1 s                     | `grid: bool`, `batteries: { <name>: { "capacity": str, "status": str } }`                                          |
-| `audio`        | 1 s                     | `muted: bool`, `volume: int`                                                                                       |
+| `audio`        | 1 s                     | `muted: bool`, `volume: int`, `active_sink: str?` (description of the sink currently RUNNING; omitted if pactl is unavailable or no sink is RUNNING and no default exists) |
 | `stream`       | 1 s                     | `streaming: bool`, `obs: bool`                                                                                     |
 | `vpn`          | 10 s                    | `connected: bool`, `country: str`, `city: str`                                                                     |
 | `updates`      | hourly (+ pacman hook)  | `outstanding_updates: int`                                                                                         |
